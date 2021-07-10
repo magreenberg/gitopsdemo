@@ -1,0 +1,101 @@
+apiVersion: v1
+items:
+- apiVersion: apps.openshift.io/v1
+  kind: DeploymentConfig
+  metadata:
+    labels:
+      app: nginx
+    name: nginx
+  spec:
+    replicas: 1
+    selector:
+      app: nginx
+      deploymentconfig: nginx
+    strategy:
+      resources: {}
+      rollingParams:
+        intervalSeconds: 1
+        maxSurge: 25%
+        maxUnavailable: 25%
+        timeoutSeconds: 600
+        updatePeriodSeconds: 1
+      type: Rolling
+    template:
+      metadata:
+        labels:
+          app: nginx
+          deploymentconfig: nginx
+      spec:
+        containers:
+        - image: twalter/openshift-nginx:latest
+          imagePullPolicy: Always
+          name: nginx
+          ports:
+          - containerPort: 8081
+            protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          volumeMounts:
+          - mountPath: /etc/nginx/nginx.conf
+            name: nginx-conf-volume
+            subPath: nginx.conf
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+        volumes:
+        - configMap:
+            name: nginx-nginx-config
+          name: nginx-conf-volume
+    triggers:
+    - type: ConfigChange
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      app: nginx
+    name: nginx
+  spec:
+    ports:
+    - name: http
+      port: 8081
+      protocol: TCP
+      targetPort: 8081
+    selector:
+      app: nginx
+      deploymentconfig: nginx
+- apiVersion: route.openshift.io/v1
+  kind: Route
+  metadata:
+    labels:
+      app: nginx
+    name: nginx
+  spec:
+    port:
+      targetPort: 8081
+    tls:
+      termination: edge
+    to:
+      kind: Service
+      name: nginx
+    weight: 100
+    wildcardPolicy: None
+- apiVersion: v1
+  data:
+    nginx.conf: "worker_processes auto;\npid /run/nginx.pid;\n\nevents {\n    worker_connections\
+      \ 768;\n}\n\nhttp {\n        sendfile on;\n        tcp_nopush on;\n        tcp_nodelay\
+      \ on;\n        keepalive_timeout 65;\n        types_hash_max_size 2048;\n\n\
+      \        include /etc/nginx/mime.types;\n        default_type application/octet-stream;\n\
+      \n        ssl_protocols TLSv1 TLSv1.1 TLSv1.2;\n        ssl_prefer_server_ciphers\
+      \ on;\n\n        server {\n          listen 8081;\n\n          location / {\n\
+      \            return 200 'Nginx is up and running';\n            add_header Content-Type\
+      \ text/plain;\n          }\n        }\n\n        log_format upstreamlog '[$time_local]\
+      \ $remote_addr - $remote_user - $server_name to: $upstream_addr: $request request_time\
+      \ $request_time' status $status upstream-status $upstream_status;\n\n      \
+      \  access_log /var/log/nginx/access.log upstreamlog;\n        error_log /var/log/nginx/error.log;\n\
+      \n        gzip on;\n        gzip_disable \"msie6\";\n}\n"
+  kind: ConfigMap
+  metadata:
+    name: nginx-nginx-config
+kind: List
+metadata: {}
